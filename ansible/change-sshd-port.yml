@@ -1,0 +1,27 @@
+---
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  tasks:
+    - name: store desired sshd port
+      set_fact: 
+        desired_port: "{{ ansible_port }}"
+    - name: check if sshd runs on port {{ desired_port }}
+      local_action: wait_for port={{ desired_port }} timeout=5 host={{ hostvars[inventory_hostname]["ansible_host"] }}
+      register: ssh_check_output
+      ignore_errors: true
+    - name: configure ansible to use standard port
+      set_fact:
+        ansible_port: "22"
+      when: ssh_check_output.failed == true
+    - name: reconfigure sshd port to {{ desired_port }}
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        line: "Port {{ desired_port }}"
+      when: ssh_check_output.failed == true
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+      ignore_errors: true
+      when: ssh_check_output.failed == true

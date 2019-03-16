@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -e
+
+SCRIPT_DIR=`dirname $0`
+SSH_PORT=2222
+REMOTE_USER=dockerclient
+REMOTE_SOCKET=/var/run/docker.sock
+# select random port using python socket
+LOCAL_PORT=`python3 -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()"`
+LOCAL_SOCKET=tcp://localhost:$LOCAL_PORT
+# retrieve infos about the primary manager using the dynamic inventory script
+MANAGER_DATA=`./$SCRIPT_DIR/../terraform/terraform-swarm-inventory.py --host swarm-primary-manager`
+# extract the ip using python json
+MANAGER_IP=`echo $MANAGER_DATA | python3 -c "import sys, json; print(json.load(sys.stdin)['ansible_host'])"`
+
+# forward the docker.sock, send to background
+ssh -p $SSH_PORT -N -L $LOCAL_PORT:$REMOTE_SOCKET $REMOTE_USER@$MANAGER_IP &
+SSH_PID=$!
+
+# wait until local socket is available
+while ! nc -z localhost $LOCAL_PORT; do sleep 0.1; done
+
+# execute the docker command
+DOCKER_HOST="$LOCAL_SOCKET" docker "$@"
+
+# terminate the ssh session
+kill -15 $SSH_PID

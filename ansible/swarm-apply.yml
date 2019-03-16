@@ -1,0 +1,29 @@
+---
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: init swarm on primary master
+      docker_swarm:
+        state: present
+        advertise_addr: "{{ansible_default_ipv4.address}}"
+      register: swarm_init_result
+
+- hosts: swarm-secondary-managers
+  remote_user: root
+  tasks:
+    - name: add secondary managers to swarm
+      docker_swarm:
+        state: join
+        advertise_addr: "{{ansible_default_ipv4.address}}"
+        remote_addrs: [ "{{hostvars['swarm-primary-manager'].ansible_default_ipv4.address}}" ]
+        join_token: "{{hostvars['swarm-primary-manager'].swarm_init_result.swarm_facts.JoinTokens.Manager}}"
+
+- hosts: swarm-workers
+  remote_user: root
+  tasks:
+    - name: add workers to swarm
+      docker_swarm:
+        state: join
+        advertise_addr: "{{ansible_default_ipv4.address}}"
+        remote_addrs: [ "{{hostvars['swarm-primary-manager'].ansible_default_ipv4.address}}" ]
+        join_token: "{{hostvars['swarm-primary-manager'].swarm_init_result.swarm_facts.JoinTokens.Worker}}"

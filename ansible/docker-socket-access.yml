@@ -1,0 +1,18 @@
+---
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: create user dockerclient
+      user:
+        name: dockerclient
+        group: docker
+        system: yes
+        shell: /sbin/nologin
+        create_home: yes
+        home: /var/dockerclient
+    - name: set authorized_keys for dockerclient
+      authorized_key:
+        user: dockerclient
+        state: present
+        key: "{{ hostvars[inventory_hostname].ssh_public_key }}"
+

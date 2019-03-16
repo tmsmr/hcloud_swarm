@@ -1,0 +1,111 @@
+---
+# disable ssh password auth
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  tasks:
+    - name: copy locked-down sshd_config
+      copy:
+        src: assets/sshd_config
+        dest: /etc/ssh/sshd_config
+        mode: 0600
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+
+# configure firewall
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  vars:
+      ansible_cluster_hosts: "{{ groups['all'] | map('extract', hostvars, 'ansible_host') | join(',') }}"
+  vars_files:
+    - vars/iptables_vars.yml
+  tasks: 
+    - name: create and copy iptables script
+      template:
+        src: assets/iptables_swarm_host.j2
+        dest: /usr/local/sbin/iptables_swarm_host
+        mode: 0700
+    - name: copy iptables service
+      copy:
+        src: assets/swarm-iptables.service
+        dest: /usr/lib/systemd/system/swarm-iptables.service
+        mode: 0644
+    - name: enable and restart iptables service
+      systemd:
+        name: swarm-iptables
+        daemon_reload: yes
+        enabled: yes
+        masked: no
+        state: restarted
+
+# install docker
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  vars_files:
+    - vars/docker_vars.yml
+    - vars/secret_vars.yml
+  tasks:
+    - name: add docker-ce stable repository
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+    - name: install docker-ce ({{docker_version}})
+      yum:
+        name: "{{ packages }}"
+        allow_downgrade: yes
+      vars:
+        packages:
+          - docker-ce-{{docker_version}}
+    - name: enable and start docker service
+      systemd:
+        name: docker
+        enabled: yes
+        masked: no
+        state: started
+    - name: check if hetzner volume plugin is installed
+      shell: "docker plugin ls | grep hetzner | wc -l"
+      register: hetzner_volume_plugin_installed
+    - name: install hetzner volume plugin ({{ docker_hetzner_volume_driver_version }})
+      shell: "docker plugin install --alias hetzner --grant-all-permissions costela/docker-volume-hetzner:{{ docker_hetzner_volume_driver_version }}"
+      when: hetzner_volume_plugin_installed.stdout == "0"
+    - name: check if hetzner volume plugin is unconfigured
+      shell: "docker plugin inspect --format='{{ '{{' }}.Settings.Env{{ '}}' }}' hetzner | egrep '.*apikey= .*' | wc -l"
+      register: hetzner_volume_plugin_unconfigured
+    - name: disable hetzner volume plugin
+      shell: "docker plugin disable hetzner"
+      when: hetzner_volume_plugin_unconfigured.stdout == "1"
+    - name: configure hetzner volume plugin
+      shell: "docker plugin set hetzner apikey={{ hetzner_cloud_api_key }}"
+      when: hetzner_volume_plugin_unconfigured.stdout == "1"
+    - name: enable hetzner volume plugin
+      shell: "docker plugin enable hetzner"
+      when: hetzner_volume_plugin_unconfigured.stdout == "1"
+    - name: add EPEL repository
+      yum:
+        name: epel-release
+        state: present
+    - name: install pip
+      yum:
+        name: python2-pip
+        state: present
+    - name: install docker python module
+      pip:
+        name: docker
+
+# upgrade system
+- hosts: all
+  remote_user: root
+  gather_facts: no
+  tasks:
+    - name: upgrade all packages, ignoring docker packages
+      yum:
+        name: "*"
+        exclude: docker-ce
+        state: latest

@@ -1,0 +1,32 @@
+---
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: drain the node
+      shell: "docker node update --availability drain {{ target }}"
+
+- hosts: "{{ target }}"
+  remote_user: root
+  vars_files:
+    - vars/docker_vars.yml
+  tasks:
+    - name: upgrade docker
+      yum:
+        name: "{{ packages }}"
+        allow_downgrade: yes
+      vars:
+        packages:
+          - docker-ce-{{docker_version}}
+    - name: reboot
+      shell: sleep 5 && /sbin/shutdown -r now
+      async: 1
+      poll: 0
+      ignore_errors: true 
+    - name: wait for server
+      local_action: wait_for host={{ ansible_default_ipv4.address }} port={{ ansible_port }} state=started delay=30 timeout=240
+
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: activate the node
+      shell: "docker node update --availability active {{ target }}"

@@ -1,0 +1,3 @@
+terraform.tfstate.backup
+secrets.auto.tfvars
+.terraform

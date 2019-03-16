@@ -1,0 +1,21 @@
+---
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: drain the node
+      shell: "docker node update --availability drain {{ target }}"
+  
+- hosts: "{{ target }}"
+  remote_user: root
+  tasks:
+    - name: leave the swarm
+      docker_swarm:
+        state: absent
+
+- hosts: swarm-primary-manager
+  remote_user: root
+  tasks:
+    - name: remove node from swarm
+      docker_swarm:
+        state: remove
+        node_id: "{{ target }}"

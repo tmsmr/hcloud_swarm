@@ -1,0 +1,78 @@
+version: '3.7'
+services:
+  traefik:
+    image: traefik:1.7-alpine
+    networks:
+      - proxy
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.frontend.rule=Host:traefik.example.org"
+        # create PASSWORD-HASH with 'openssl passwd -apr1 | sed -e s/\\$/\\$\\$/g'
+        - "traefik.frontend.auth.basic.users=admin:PASSWORD-HASH"
+        - "traefik.port=8080"
+    ports:
+      - 80:80
+      - 443:443
+    configs:
+      - source: traefik-config
+        target: /traefik.toml
+    volumes:
+      - traefik-data:/traefik-data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  portainer:
+    image: portainer/portainer:1.20.2
+    command: -H tcp://tasks.portainer-agent:9001 --tlsskipverify
+    volumes:
+      - portainer-data:/data
+    networks:
+      - portainer
+      - proxy
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.frontend.rule=Host:portainer.example.org"
+        - "traefik.port=9000"
+
+  portainer-agent:
+    image: portainer/agent:1.2.1
+    environment:
+      AGENT_CLUSTER_ADDR: tasks.portainer-agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - portainer
+    deploy:
+      mode: global
+
+volumes:
+  traefik-data:
+    driver: hetzner
+    driver_opts:
+      size: '10'
+  portainer-data:
+    driver: hetzner
+    driver_opts:
+      size: '10'
+
+configs:
+  traefik-config:
+    file: ./traefik.toml
+
+networks:
+  proxy:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+  portainer:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+

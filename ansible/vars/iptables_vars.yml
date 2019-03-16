@@ -1,0 +1,4 @@
+ansible_external_interface: eth0
+ansible_restricted_host_tcp: 2377,7946
+ansible_restricted_host_udp: 7946,4789
+ansible_reject_host_tcp: 22,80,443

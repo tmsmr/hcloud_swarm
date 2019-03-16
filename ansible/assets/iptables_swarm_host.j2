@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+# exit on error
+set -e
+
+# iptables binaries
+IPT="/sbin/iptables"
+IPT6="/sbin/ip6tables"
+IPTS="/sbin/iptables-save"
+
+# network interfaces
+NIC_LO="lo"
+NIC_WAN="{{ ansible_external_interface }}"
+
+# custom chains
+CLUSTER_HOST_INPUT="CLUSTER-HOST-INPUT"
+
+# list of the clusters ips/subnets
+CLUSTER_IPS="{{ ansible_cluster_hosts }}"
+
+# list of restricted services running on the host (tcp) - accessible from cluster ips
+RESTRICTED_HOST_TCP="{{ ansible_restricted_host_tcp }}"
+
+# list of restricted services running on the host (udp) - accessible from cluster ips
+RESTRICTED_HOST_UDP="{{ ansible_restricted_host_udp }}"
+
+# list of ports to reject on the external nic (autoconfiguration + DNS LB)
+REJECT_HOST_TCP="{{ ansible_reject_host_tcp }}"
+
+# allow outgoing http/https with IPv6 since we can't disable IPv6 at hcloud completely
+$IPT6 -A INPUT -i $NIC_WAN -m state --state ESTABLISHED -j ACCEPT
+$IPT6 -A OUTPUT -o $NIC_WAN -p tcp -m multiport --dports 80,443 -j ACCEPT
+
+# drop everything else on the external interface whats related to IPv6
+$IPT6 -A INPUT -i $NIC_WAN -j DROP
+$IPT6 -A OUTPUT -o $NIC_WAN -j DROP
+$IPT6 -A FORWARD -o $NIC_WAN -j DROP
+$IPT6 -A FORWARD -i $NIC_WAN -j DROP
+
+# ensure FOWARD is on DROP
+$IPT -P FORWARD DROP
+
+# check if custom chains are missing (first run at boot) -> create them if needed
+CUSTOM_CHAINS_PRESENT=`$IPTS | grep ":$CLUSTER_HOST_INPUT" | wc -l`
+if [ $CUSTOM_CHAINS_PRESENT -eq 0 ]; then
+    $IPT -P INPUT DROP
+    $IPT -N $CLUSTER_HOST_INPUT
+    $IPT -A INPUT -j $CLUSTER_HOST_INPUT
+fi
+
+# flush custom chains
+$IPT -F $CLUSTER_HOST_INPUT
+
+# allow traffic from all interfaces but $NIC_WAN
+$IPT -I INPUT ! -i $NIC_WAN -j ACCEPT
+
+# allow incoming traffic for established connections
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -m state --state ESTABLISHED -j ACCEPT
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -p icmp -m state --state RELATED -j ACCEPT
+
+#
+# INCOMING (general)
+#
+
+# allow esp traffic from cluster ips
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -s $CLUSTER_IPS -p esp -j ACCEPT
+
+# allow icmp
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -p icmp -j ACCEPT
+
+# allow ssh
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -p tcp --dport 2222 -j ACCEPT
+
+#
+# HOST PORT REJECTS
+#
+
+# reject public http ports while no forward rule is configured by docker
+$IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -p tcp -m multiport --dports $REJECT_HOST_TCP -j ACCEPT
+
+#
+# HOST SERVICES
+#
+
+for protocol in "tcp" "udp"; do
+    RESTRICTED_HOST_PORTS=$RESTRICTED_HOST_TCP
+    if [ "$protocol" == "udp" ]; then
+        RESTRICTED_HOST_PORTS=$RESTRICTED_HOST_UDP
+    fi
+    # if $RESTRICTED_HOST_PORTS is not empty
+    if [ -n "$RESTRICTED_HOST_PORTS" ]; then
+      # allow incoming traffic on $RESTRICTED_HOST_PORTS services from cluster ips
+      $IPT -A $CLUSTER_HOST_INPUT -i $NIC_WAN -s $CLUSTER_IPS -p $protocol -m multiport --dports $RESTRICTED_HOST_PORTS -j ACCEPT
+    fi
+done

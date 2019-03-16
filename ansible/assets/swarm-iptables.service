@@ -1,0 +1,14 @@
+[Unit]
+Description=firewall for swarm cluster
+After=syslog.target
+AssertPathExists=/usr/local/sbin/iptables_swarm_host
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/iptables_swarm_host
+StandardOutput=syslog
+StandardError=syslog
+
+[Install]
+WantedBy=basic.target
