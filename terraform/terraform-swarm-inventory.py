@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from python_terraform import Terraform
 import json
+import os
 
 ANSIBLE_SSH_PORT = '2222'
 
@@ -19,14 +19,17 @@ def wd_to_script_dir():
     dir = os.path.dirname(path)
     os.chdir(dir)
 
+def terraform_output(key):
+    ret = os.popen('terraform output -json ' + key).read()
+    return json.loads(ret)
+
 def main():
     args = get_args()
     wd_to_script_dir()
-    t = Terraform()
-    primary_managers = t.output('swarm-primary-managers')
-    secondary_managers = t.output('swarm-secondary-managers')
-    workers = t.output('swarm-workers')
-    ssh_public_key = t.output('ssh-public-key')
+    primary_managers = terraform_output('swarm-primary-managers')
+    secondary_managers = terraform_output('swarm-secondary-managers')
+    workers = terraform_output('swarm-workers')
+    ssh_public_key = terraform_output('ssh-public-key')
     if args.list:
         inventory = {
             'swarm-primary-managers': list(primary_managers.keys()),
