@@ -1,0 +1,34 @@
+global:
+  sendAnonymousUsage: false
+  checkNewVersion: false
+
+log:
+  level: "WARN"
+
+metrics:
+  prometheus: {}
+
+entryPoints:
+  insecure:
+    address: ":80"
+  secure:
+    address: ":443"
+
+api:
+  dashboard: true
+  insecure: true
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    swarmMode: true
+    exposedByDefault: false
+    network: "basic_proxy"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "abuse@example.org"
+      storage: "/traefik-data/acme.json"
+      httpChallenge:
+        entryPoint: "insecure"

@@ -107,5 +107,10 @@
     - name: upgrade all packages, ignoring docker packages
       yum:
         name: "*"
+        update_cache: yes
         exclude: docker-ce
         state: latest
+      register: update_output
+    - name: "show updated packages"
+      debug: var=update_output.results
+      when: update_output.changed == true

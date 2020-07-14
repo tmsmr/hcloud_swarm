@@ -1,0 +1,41 @@
+- hosts: all
+  serial: 1
+  remote_user: root
+  vars_files:
+    - vars/secret_vars.yml
+  pre_tasks:
+    - name: find attached hcloud volumes
+      set_fact:
+        hcloud_volumes: "{{ hostvars[inventory_hostname].ansible_mounts | selectattr('device', 'match', hcloud_device_pattern) | list | json_query(hcloud_volume_data_query) }}"
+      vars:
+        hcloud_device_pattern: "^.*HC_Volume.*$"
+        hcloud_volume_data_query: "[*].{device: device, mount: mount}"
+    - name: transform into dict with hetzner volume ids as keys
+      set_fact:
+        hcloud_volumes_dict: "{{ hcloud_volumes_dict | combine({item.device.split('/')[-1].split('_')[-1]: item})}}"
+      with_items: "{{ hcloud_volumes }}"
+      loop_control:
+        label: "{{ item.device }}"
+      vars:
+        hcloud_volumes_dict: {}
+  tasks:
+    - name: run restic backup
+      docker_container:
+        name: "restic-backup-{{ item }}"
+        image: "restic/restic:0.9.6"
+        command: "backup --host {{ item }} /{{ item }}"
+        volumes:
+          - "{{ hcloud_volumes_dict[item]['mount'] }}:/{{ item }}"
+        env:
+          AWS_DEFAULT_REGION: "eu-central-1"
+          RESTIC_REPOSITORY: "{{ restic_repository }}"
+          RESTIC_PASSWORD: "{{ restic_repository_pass }}"
+          AWS_ACCESS_KEY_ID: "{{ s3_backup_access_key }}"
+          AWS_SECRET_ACCESS_KEY: "{{ s3_backup_secret_key }}"
+        pull: yes
+        detach: no
+        cleanup: yes
+      with_items: "{{ hcloud_volumes_dict }}"
+      loop_control:
+        label: "restic-backup-{{ item }}"
+      when: hcloud_volumes_dict is defined
