@@ -12,6 +12,7 @@ def get_args():
     parser.add_argument('--flatlist', action='store_true')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--host')
+    parser.add_argument('--accept', action='store_true')
     return parser.parse_args()
 
 def wd_to_script_dir():
@@ -50,6 +51,13 @@ def main():
             'ansible_port': ANSIBLE_SSH_PORT,
             'ssh_public_key': ssh_public_key
         }))
+    if args.accept:
+        hosts = {**primary_managers, **secondary_managers, **workers}
+        for host in hosts:
+            ip = hosts[host]
+            os.system('ssh-keygen -R %s' % ip)
+            os.system('ssh-keyscan -H %s >> ~/.ssh/known_hosts' % ip)
+            os.system('ssh-keyscan -H -p %s %s >> ~/.ssh/known_hosts' % (ANSIBLE_SSH_PORT, ip))
 
 if __name__ == "__main__":
     main()

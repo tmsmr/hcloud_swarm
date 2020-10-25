@@ -12,8 +12,7 @@ Everything here works semi-automatic. The goal is to make maintenance easier, do
 - Initialize project: `terraform init`
 - Apply project: `terraform apply`
 - Store/commit generated 'terraform.tfstate' (Terraform is NOT stateless)
-- Install the 'python-terraform' Python module
-- (Accept SSH host keys: `./accept-new-host-keys.py`)
+- (Accept SSH host keys: `./terraform-swarm-inventory.py --accept`)
 
 ## Deploy/Configure instances with Ansible (in dir ansible)
 - (Change into 'roles' and install dependencies: `ansible-galaxy install --roles-path . -r requirements.yml`)
