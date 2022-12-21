@@ -1,3 +1,8 @@
+# DEPRECATION NOTICE
+Unfortunately the development of Docker Swarm stagnated at some point (IMO...) and i stopped using it for my personal stuff. As a consequence, i haven't touched this repository for a while. I doubt everything would work as intended at the moment. While it might be still useful as reference or inspiration, i absolutely don't recommend using this stack for production!
+
+I'm currently working on a minimal K8s Deployment based on K3s for the Hetzner Cloud. It is WiP, but you might want to check it out: https://github.com/tmsmr/hcloud-k3s
+
 # Swarm Cluster on Hetzner Cloud
 
 This collection of Terraform configs, Ansible playbooks and some other utilities helps to deploy and maintain a Docker Swarm Cluster + some basic tools (biased) on Hetzner Cloud instances.
